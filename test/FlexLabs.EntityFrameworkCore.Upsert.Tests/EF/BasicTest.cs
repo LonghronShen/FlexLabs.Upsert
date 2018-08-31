@@ -1,4 +1,9 @@
-﻿using System;
+﻿//#define USE_POSTGRESQL
+//#define USE_SQLSERVER
+//#define USE_MYSQL
+#define USE_SQLITE
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -15,12 +20,16 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
             private const string Postgres_ImageName = "flexlabs_upsert_test_postgres";
             private const string Postgres_Port = "25432";
             private static readonly string Postgres_Connection = $"Server=localhost;Port={Postgres_Port};Database={Username};Username={Username};Password={Password}";
+
             private const string SqlServer_ImageName = "flexlabs_upsert_test_sqlserver";
             private const string SqlServer_Port = "21433";
             private static readonly string SqlServer_Connection = $"Server=localhost,{SqlServer_Port};Database={Username};User Id=sa;Password={Password}";
+
             private const string MySql_ImageName = "flexlabs_upsert_test_mysql";
             private const string MySql_Port = "23306";
             private static readonly string MySql_Connection = $"Server=localhost;Port={MySql_Port};Database={Username};Uid=root;Pwd={Password}";
+
+            private static readonly string Sqlite_Connection = $"Data Source={Username}.db";
 
             private const string Username = "testuser";
             private const string Password = "Password12!";
@@ -28,6 +37,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
             private static readonly string AppVeyor_Postgres_Connection = $"Server=localhost;Port=5432;Database={Username};Username=postgres;Password={Password}";
             private static readonly string AppVeyor_SqlServer_Connection = $"Server=(local)\\SQL2017;Database={Username};User Id=sa;Password={Password}";
             private static readonly string AppVeyor_MySql_Connection = $"Server=localhost;Port=3306;Database={Username};Uid=root;Pwd={Password}";
+            private static readonly string AppVeyor_Sqlite_Connection = $"Data Source={Username}.db";
 
             private bool IsAppVeyor => Environment.GetEnvironmentVariable("APPVEYOR") != null;
 
@@ -44,19 +54,29 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
                     WaitForConnection(TestDbContext.DbDriver.Postgres, AppVeyor_Postgres_Connection);
                     WaitForConnection(TestDbContext.DbDriver.MSSQL, AppVeyor_SqlServer_Connection);
                     WaitForConnection(TestDbContext.DbDriver.MySQL, AppVeyor_MySql_Connection);
+                    WaitForConnection(TestDbContext.DbDriver.Sqlite, AppVeyor_Sqlite_Connection);
                 }
                 else
                 {
+#if USE_POSTGRESQL
                     _processes[TestDbContext.DbDriver.Postgres] = Process.Start("docker",
                         $"run --name {Postgres_ImageName} --platform linux -e POSTGRES_USER={Username} -e POSTGRES_PASSWORD={Password} -e POSTGRES_DB={Username} -p {Postgres_Port}:5432 postgres:alpine");
+                    WaitForConnection(TestDbContext.DbDriver.Postgres, Postgres_Connection);
+#endif
+#if USE_SQLSERVER
                     _processes[TestDbContext.DbDriver.MSSQL] = Process.Start("docker",
                         $"run --name {SqlServer_ImageName} --platform linux -e ACCEPT_EULA=Y -e MSSQL_PID=Express -e SA_PASSWORD={Password} -p {SqlServer_Port}:1433 microsoft/mssql-server-linux");
+                    WaitForConnection(TestDbContext.DbDriver.MSSQL, SqlServer_Connection);
+#endif
+#if USE_MYSQL
                     _processes[TestDbContext.DbDriver.MySQL] = Process.Start("docker",
                         $"run --name {MySql_ImageName} --platform linux -e MYSQL_ROOT_PASSWORD={Password} -e MYSQL_USER={Username} -e MYSQL_PASSWORD={Password} -e MYSQL_DATABASE={Username} -p {MySql_Port}:3306 mysql");
-
-                    WaitForConnection(TestDbContext.DbDriver.Postgres, Postgres_Connection);
-                    WaitForConnection(TestDbContext.DbDriver.MSSQL, SqlServer_Connection);
                     WaitForConnection(TestDbContext.DbDriver.MySQL, MySql_Connection);
+#endif
+
+#if USE_SQLITE
+                    WaitForConnection(TestDbContext.DbDriver.Sqlite, Sqlite_Connection);
+#endif
                 }
             }
 
@@ -72,6 +92,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
                     try
                     {
                         context = new TestDbContext(options);
+                        context.Database.EnsureDeleted();
                         context.Database.EnsureCreated();
                         _dataContexts[driver] = options;
                         isSuccess = true;
@@ -141,10 +162,16 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         {
             using (var dbContext = new TestDbContext(_dataContexts[driver]))
             {
-                dbContext.Countries.RemoveRange(dbContext.Countries);
-                dbContext.DashTable.RemoveRange(dbContext.DashTable);
-                dbContext.SchemaTable.RemoveRange(dbContext.SchemaTable);
-                dbContext.PageVisits.RemoveRange(dbContext.PageVisits);
+                dbContext.Database.EnsureDeleted();
+                dbContext.Database.EnsureCreated();
+                dbContext.SaveChanges();
+            }
+            using (var dbContext = new TestDbContext(_dataContexts[driver]))
+            {
+                //dbContext.Countries.RemoveRange(dbContext.Countries);
+                //dbContext.DashTable.RemoveRange(dbContext.DashTable);
+                //dbContext.SchemaTable.RemoveRange(dbContext.SchemaTable);
+                //dbContext.PageVisits.RemoveRange(dbContext.PageVisits);
 
                 dbContext.Countries.Add(_dbCountry);
                 dbContext.PageVisits.Add(_dbVisit);
@@ -153,9 +180,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_InitialDbState(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);
@@ -169,9 +205,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_Country_Update_NoColumns(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);
@@ -198,9 +243,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_Country_Update_SelectedColumns(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);
@@ -233,9 +287,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_Country_Insert(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);
@@ -267,9 +330,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_PageVisit_Update_NoColumns(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);
@@ -297,9 +369,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_PageVisit_Update_SelectedColumns(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);
@@ -334,9 +415,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_DashedTable(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);
@@ -356,9 +446,18 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF
         }
 
         [Theory]
+#if USE_POSTGRESQL
         [InlineData(TestDbContext.DbDriver.Postgres)]
+#endif
+#if USE_SQLSERVER
         [InlineData(TestDbContext.DbDriver.MSSQL)]
+#endif
+#if USE_MYSQL
         [InlineData(TestDbContext.DbDriver.MySQL)]
+#endif
+#if USE_SQLITE
+        [InlineData(TestDbContext.DbDriver.Sqlite)]
+#endif
         public void Upsert_SchemaTable(TestDbContext.DbDriver driver)
         {
             ResetDb(driver);

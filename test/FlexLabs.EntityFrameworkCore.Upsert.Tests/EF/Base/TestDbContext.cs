@@ -11,10 +11,35 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF.Base
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Country>().HasIndex(c => c.ISO).IsUnique();
-            modelBuilder.Entity<PageVisit>().HasIndex(pv => new { pv.UserID, pv.Date }).IsUnique();
-            modelBuilder.Entity<DashTable>().HasIndex(t => t.DataSet).IsUnique();
-            modelBuilder.Entity<SchemaTable>().HasIndex(t => t.Name).IsUnique();
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<Country>(c =>
+            {
+                c.HasKey(x => x.ID);
+                c.Property(x => x.ID).ValueGeneratedOnAdd();
+                c.HasIndex(x => x.ISO).IsUnique();
+            });
+
+            modelBuilder.Entity<PageVisit>(c =>
+            {
+                c.HasKey(x => x.ID);
+                c.Property(x => x.ID).ValueGeneratedOnAdd();
+                c.HasIndex(x => new { x.UserID, x.Date }).IsUnique();
+            });
+
+            modelBuilder.Entity<DashTable>(c =>
+            {
+                c.HasKey(x => x.ID);
+                c.Property(x => x.ID).ValueGeneratedOnAdd();
+                c.HasIndex(x => x.DataSet).IsUnique();
+            });
+
+            modelBuilder.Entity<SchemaTable>(c =>
+            {
+                c.HasKey(x => x.ID);
+                c.Property(x => x.ID).ValueGeneratedOnAdd();
+                c.HasIndex(x => x.Name).IsUnique();
+            });
         }
 
         public DbSet<Country> Countries { get; set; }
@@ -22,7 +47,7 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF.Base
         public DbSet<DashTable> DashTable { get; set; }
         public DbSet<SchemaTable> SchemaTable { get; set; }
 
-        public enum DbDriver { Postgres, MSSQL, MySQL }
+        public enum DbDriver { Postgres, MSSQL, MySQL, Sqlite }
         public static DbContextOptions<TestDbContext> Configure(string connectionString, DbDriver driver)
         {
             var options = new DbContextOptionsBuilder<TestDbContext>();
@@ -37,9 +62,14 @@ namespace FlexLabs.EntityFrameworkCore.Upsert.Tests.EF.Base
                 case DbDriver.MySQL:
                     options.UseMySql(connectionString);
                     break;
+                case DbDriver.Sqlite:
+                    options.UseSqlite(connectionString);
+                    break;
                 default:
                     throw new InvalidOperationException("Invalid database driver: " + driver);
             }
+
+            options.EnableSensitiveDataLogging();
             return options.Options;
         }
     }

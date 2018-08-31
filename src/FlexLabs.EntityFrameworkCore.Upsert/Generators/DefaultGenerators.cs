@@ -9,6 +9,7 @@
                 new MySqlUpsertSqlGenerator(),
                 new PostgreSQLUpsertSqlGenerator(),
                 new SqlServerUpsertSqlGenerator(),
+                new SqliteUpsertSqlGenerator(), 
             });
     }
 }
